@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT-like Website</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #FFC0CB, #002147);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .logo {
+            width: 150px;
+            margin: 20px 0;
+        }
+        .chat-container {
+            width: 90%;
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-messages {
+            padding: 20px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e6f3ff;
+            align-self: flex-end;
+        }
+        .ai-message {
+            background-color: #f0f0f0;
+            align-self: flex-start;
+        }
+        .input-area {
+            display: flex;
+            padding: 20px;
+        }
+        #user-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        #send-button {
+            padding: 10px 20px;
+            background-color: #002147;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <img src="123.jpg" alt="Company Logo" class="logo">
+    <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+            <!-- Messages will be added here dynamically -->
+        </div>
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Type your message...">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+            const chatMessages = document.getElementById('chat-messages');
+
+            const API_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+            const API_KEY = '2d1b7fcf8a18a18f8e6fe4193b96b487.jf2Ta8lLWCM0rCQV';
+
+            function base64UrlEncode(str) {
+                return btoa(str)
+                    .replace(/\+/g, '-')
+                    .replace(/\//g, '_')
+                    .replace(/=+$/, '');
+            }
+
+            function generateToken(apiKey, expSeconds) {
+                const [id, secret] = apiKey.split('.');
+                const now = Math.floor(Date.now() / 1000); // Current time in seconds
+                
+                const header = {
+                    alg: "HS256",
+                    sign_type: "SIGN"
+                };
+                
+                const payload = {
+                    api_key: id,
+                    exp: now + expSeconds,
+                    timestamp: now
+                };
+
+                const encodedHeader = base64UrlEncode(JSON.stringify(header));
+                const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+                
+                const signature = CryptoJS.HmacSHA256(
+                    encodedHeader + "." + encodedPayload,
+                    secret
+                ).toString(CryptoJS.enc.Base64);
+
+                const encodedSignature = base64UrlEncode(atob(signature));
+
+                return `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
+            }
+
+            function addMessage(message, isUser) {
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('message');
+                messageElement.classList.add(isUser ? 'user-message' : 'ai-message');
+                messageElement.textContent = message;
+                chatMessages.appendChild(messageElement);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            async function sendMessage() {
+                const message = userInput.value.trim();
+                if (message) {
+                    addMessage(message, true);
+                    userInput.value = '';
+
+                    try {
+                        const token = generateToken(API_KEY, 3600); // Token expires in 1 hour
+                        console.log("Generated token:", token); // Log the token for inspection
+
+                        const response = await axios.post(API_ENDPOINT, {
+                            model: "glm-4",
+                            messages: [{ role: 'user', content: message }]
+                        }, {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+
+                        const aiResponse = response.data.choices[0].message.content;
+                        addMessage(aiResponse, false);
+                    } catch (error) {
+                        console.error('Error:', error);
+                        let errorMessage = 'Sorry, there was an error processing your request.';
+                        if (error.response) {
+                            console.log("Error response:", error.response); // Log the full error response
+                            errorMessage += ` Status: ${error.response.status}. ${error.response.data.error || ''}`;
+                        } else if (error.request) {
+                            errorMessage += ' No response received from the server.';
+                        } else {
+                            errorMessage += ` ${error.message}`;
+                        }
+                        addMessage(errorMessage, false);
+                    }
+                }
+            }
+
+            sendButton.addEventListener('click', sendMessage);
+
+            userInput.addEventListener('keypress', function(event) {
+                if (event.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
